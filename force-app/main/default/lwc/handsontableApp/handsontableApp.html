@@ -1,0 +1,14 @@
+<template>
+    <template if:true={error}>
+        <div class="slds-text-color_error slds-p-around_small">{error}</div>
+    </template>
+    <c-hot-grid
+        data={data}
+        columns={columns}
+        nested-headers={nestedHeaders}
+        collapsible-columns={collapsibleColumns}
+        oncellchange={handleCellChange}
+        onrowcreate={handleRowCreate}
+        onrowremoverequest={handleRowRemoveRequest}>
+    </c-hot-grid>
+</template>
