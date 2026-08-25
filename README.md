@@ -10,7 +10,7 @@ Handsontable data grid running as a Lightning Web Component, connected to live S
 - Column grouping with collapsible columns
 - Row create/delete synced to Salesforce
 - Built-in copy/paste, cell editors, selection, and context menu — no Locker/LWS workarounds
-- HTML sanitized by default (headers, menus, dropdowns, paste) — overridable per grid
+- HTML sanitized by default (headers, menus, dropdowns, `text/html` paste) — overridable per grid
 
 ## Project structure
 
@@ -87,7 +87,7 @@ Connects the grid to Salesforce Account data using Lightning Data Service only:
 
 ## Sanitization
 
-Handsontable 18 has no built-in sanitizer: HTML written to the DOM — header labels, context-menu labels, dropdown options, clipboard paste payloads — passes through unchanged unless you configure the [`sanitizer`](https://handsontable.com/docs/javascript-data-grid/api/options/#sanitizer) option.
+Handsontable 18 has no built-in sanitizer: HTML written to the DOM — header labels, context-menu labels, dropdown options, the `text/html` clipboard paste payload — passes through unchanged unless you configure the [`sanitizer`](https://handsontable.com/docs/javascript-data-grid/api/options/#sanitizer) option.
 
 Lightning Web Security does not cover this. LWS sanitizes `innerHTML` writes to *shared* DOM elements, and leaves writes to a component's own Shadow DOM unrestricted — which is exactly where the grid lives (`lwc:dom="manual"` inside `hotGrid`). A header label such as `{ label: 'Group<img src=x onerror="...">' }` would execute.
 
@@ -95,6 +95,7 @@ So `hotGrid` sets a default sanitizer that escapes HTML markup into literal text
 
 - Pure string operations, no DOM APIs, so LWS distortions have nothing to interfere with — no extra static resource needed.
 - For the `CopyPaste.paste` context the payload is a whole HTML document rather than a single label, so it is dropped instead of escaped. Handsontable then reads the `text/plain` flavor of the clipboard, which carries the same cells.
+- Only the `text/html` clipboard flavor is routed through the sanitizer. Handsontable reads and parses its own `application/ht-source-data-json-html` flavor — the one it writes when you copy from a grid — before and independently of the sanitizer, so that branch is not covered.
 
 What it does not cover: writes that render raw HTML by design stay the caller's responsibility — the `html` cell type or a custom `renderer` on a `columns` entry (Handsontable writes those with sanitization deliberately disabled), and `allowHtml: true` on `dropdown`/`autocomplete` columns. Left at their defaults, option lists in those editors are stripped of tags and rendered as text, so the picklist columns in this demo are covered.
 
@@ -109,7 +110,7 @@ sanitizer = (html, context) => DOMPurify.sanitize(html);
 <c-hot-grid data={data} sanitizer={sanitizer}></c-hot-grid>
 ```
 
-The value has to be a function, so it must come from a parent component's JavaScript — a template attribute or Lightning App Builder can only supply strings. Pass `false` to write raw HTML deliberately and silence Handsontable's missing-sanitizer warning.
+The value has to be a function, so it must come from a parent component's JavaScript — a template attribute or Lightning App Builder can only supply strings. Pass `false` to write raw HTML deliberately and silence Handsontable's warning about DOM writes without a sanitizer. Its paste warning is separate and fires whenever the sanitizer is not a function, `false` included.
 
 ## Shadow DOM mode
 

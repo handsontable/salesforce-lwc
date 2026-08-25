@@ -20,6 +20,13 @@ function escapeHtml(value) {
 }
 
 /**
+ * Marker Handsontable prepends to the name of a checked toggle item in the context
+ * menu ("Read only", comments, borders). It is styled through CSS, so it is markup
+ * Handsontable owns rather than content to escape.
+ */
+const HOT_CHECKED_ITEM_PREFIX = `<span class="selected">${String.fromCharCode(10003)}</span>`;
+
+/**
  * Default sanitizer handed to Handsontable.
  *
  * Handsontable 18 ships without a built-in sanitizer, and Lightning Web Security
@@ -37,6 +44,11 @@ function defaultSanitizer(content, context) {
     // `text/plain` flavor of the clipboard, which carries the same cells.
     if (context === 'CopyPaste.paste') {
         return '';
+    }
+
+    // Keep Handsontable's own checked-item marker, escape the label after it.
+    if (context === 'contextMenu' && content.startsWith(HOT_CHECKED_ITEM_PREFIX)) {
+        return HOT_CHECKED_ITEM_PREFIX + escapeHtml(content.slice(HOT_CHECKED_ITEM_PREFIX.length));
     }
 
     return escapeHtml(content);
