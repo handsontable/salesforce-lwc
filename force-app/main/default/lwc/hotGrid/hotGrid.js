@@ -8,6 +8,7 @@ const HTML_ESCAPES = {
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#39;',
+    '`': '&#96;',
 };
 
 /**
@@ -16,7 +17,7 @@ const HTML_ESCAPES = {
  */
 function escapeHtml(value) {
     return String(value === null || value === undefined ? '' : value)
-        .replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
+        .replace(/[&<>"'`]/g, (character) => HTML_ESCAPES[character]);
 }
 
 /**
