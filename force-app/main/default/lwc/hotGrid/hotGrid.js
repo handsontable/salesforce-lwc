@@ -2,6 +2,46 @@ import { LightningElement, api } from 'lwc';
 import { loadScript, loadStyle } from 'lightning/platformResourceLoader';
 import HANDSONTABLE from '@salesforce/resourceUrl/handsontable';
 
+const HTML_ESCAPES = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+};
+
+/**
+ * Escapes HTML markup so it renders as literal text. Pure string operations, no
+ * DOM APIs, so Lightning Web Security distortions have nothing to interfere with.
+ */
+function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
+}
+
+/**
+ * Default sanitizer handed to Handsontable.
+ *
+ * Handsontable 18 ships without a built-in sanitizer, and Lightning Web Security
+ * only sanitizes writes to shared DOM elements - not to a component's own Shadow
+ * DOM, which is where the grid lives. Without a sanitizer, header labels,
+ * context-menu labels, dropdown options and pasted HTML reach `innerHTML` as-is.
+ *
+ * @param {string} content Raw HTML Handsontable is about to write.
+ * @param {string} context Write surface, e.g. `header`, `contextMenu`, `CopyPaste.paste`.
+ * @returns {string} Content safe to assign to `innerHTML`.
+ */
+function defaultSanitizer(content, context) {
+    // The paste payload is a whole HTML document, not a single label, so escaping
+    // it would leave an unusable blob. Drop it instead: Handsontable then reads the
+    // `text/plain` flavor of the clipboard, which carries the same cells.
+    if (context === 'CopyPaste.paste') {
+        return '';
+    }
+
+    return escapeHtml(content);
+}
+
 export default class HotGrid extends LightningElement {
     _hot = null;
     _initialized = false;
@@ -10,6 +50,7 @@ export default class HotGrid extends LightningElement {
     _colHeaders = [];
     _nestedHeaders = [];
     _collapsibleColumns = [];
+    _sanitizer = defaultSanitizer;
 
     @api
     get data() { return this._data; }
@@ -53,6 +94,17 @@ export default class HotGrid extends LightningElement {
         this._collapsibleColumns = value ? [...value] : [];
         if (this._hot && this._collapsibleColumns.length) {
             this._hot.updateSettings({ collapsibleColumns: this._collapsibleColumns });
+        }
+    }
+
+    @api
+    get sanitizer() { return this._sanitizer; }
+    set sanitizer(value) {
+        // `false` is Handsontable's opt-out: write raw HTML on purpose, no warning.
+        this._sanitizer = (typeof value === 'function' || value === false)
+            ? value : defaultSanitizer;
+        if (this._hot) {
+            this._hot.updateSettings({ sanitizer: this._sanitizer });
         }
     }
 
@@ -105,6 +157,7 @@ export default class HotGrid extends LightningElement {
             fillHandle: true,
             hiddenColumns: true,
             licenseKey: 'non-commercial-and-evaluation',
+            sanitizer: this._sanitizer,
             afterCreateRow: (index, amount) => {
                 this.dispatchEvent(new CustomEvent('rowcreate', {
                     detail: { index, amount },
