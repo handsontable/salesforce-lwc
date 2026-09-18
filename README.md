@@ -1,6 +1,6 @@
 # Salesforce LWC Handsontable
 
-Handsontable data grid running as a Lightning Web Component, connected to live Salesforce Account data with full CRUD support. **No workaround code** — the grid runs on its built-in Shadow DOM and Lightning Web Security support (Handsontable 18.1.0+).
+Handsontable data grid running as a Lightning Web Component, connected to live Salesforce Account data with full CRUD support. **No workaround code** — the grid runs on its built-in Shadow DOM and Lightning Web Security support (Handsontable 18.1.1+).
 
 ## Features
 
@@ -31,7 +31,7 @@ force-app/main/default/
 - [Salesforce CLI (sf)](https://developer.salesforce.com/tools/salesforcecli)
 - A Salesforce org (Developer Edition, Sandbox, or Starter Trial)
 - Account records in the "All Accounts" list view (Developer Editions ship with samples)
-- Handsontable with Shadow DOM support (the bundled build is the official 18.1.0 release, which includes the fixes from [handsontable#13194](https://github.com/handsontable/handsontable/pull/13194))
+- Handsontable with Shadow DOM support (the bundled build is the official 18.1.1 release, which includes the Shadow DOM fixes from [handsontable#13194](https://github.com/handsontable/handsontable/pull/13194) and the Lightning Web Security clipboard fix from [handsontable#13388](https://github.com/handsontable/handsontable/issues/13388))
 
 ## Setup
 
