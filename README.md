@@ -10,6 +10,7 @@ Handsontable data grid running as a Lightning Web Component, connected to live S
 - Column grouping with collapsible columns
 - Row create/delete synced to Salesforce
 - Built-in copy/paste, cell editors, selection, and context menu — no Locker/LWS workarounds
+- Allowlist HTML sanitizer wired through the grid's `sanitizer` option (Handsontable 18+ ships none built in)
 
 ## Project structure
 
@@ -88,6 +89,10 @@ Connects the grid to Salesforce Account data using Lightning Data Service only:
 ## Shadow DOM mode
 
 Lightning Experience renders LWC components with the synthetic Shadow DOM polyfill by default. This project sets no `shadowSupportMode`, so the grid runs in that default mode (verified in a Developer Edition org). Handsontable also works with the native opt-in (`static shadowSupportMode = 'native'`), with one change: Salesforce's `loadStyle` injects CSS into `document.head`, which a native shadow root ignores. Inject the two stylesheets into the component's shadow tree instead - append `<link>` elements inside the `lwc:dom="manual"` container and wait for their `load` events before creating the grid.
+
+## HTML sanitizer
+
+Handsontable 18+ ships without a built-in HTML sanitizer, and Lightning Web Security sanitizes writes to shared DOM — not to a component's own shadow root, which is where the grid writes. `hotGrid` passes a small allowlist sanitizer (`sanitizeHtml` in `hotGrid.js`) through the grid's [`sanitizer`](https://handsontable.com/docs/javascript-data-grid/api/options/#sanitizer) option, so header labels, menu item labels, and clipboard payloads never reach `innerHTML` raw. It keeps basic inline formatting (`b`, `strong`, `i`, `em`, `u`, `br`, `span`), strips every attribute except `class` (the grid's menus mark checked items with a `span.selected` that the theme CSS targets), and drops script-bearing elements outright. If the DOM APIs it parses with ever throw in a sandboxed host, it fails closed to a pure-string HTML escape. For a richer policy, load a library such as DOMPurify as another static resource and call it from the same option.
 
 ## Updating the Handsontable build
 

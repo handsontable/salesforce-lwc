@@ -2,6 +2,58 @@ import { LightningElement, api } from 'lwc';
 import { loadScript, loadStyle } from 'lightning/platformResourceLoader';
 import HANDSONTABLE from '@salesforce/resourceUrl/handsontable';
 
+// Handsontable 18+ ships no built-in HTML sanitizer, and Lightning Web
+// Security sanitizes writes to shared DOM — not to this component's own
+// shadow root, where the grid writes. This allowlist keeps basic inline
+// formatting, strips every attribute except class (the grid's menus mark
+// checked items with a span.selected the theme CSS targets), and drops
+// script-bearing elements outright; swap in a library such as DOMPurify
+// (loaded as another static resource) for a richer policy.
+const ALLOWED_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'SPAN']);
+const ALLOWED_ATTRS = new Set(['class']);
+const DROPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'IFRAME', 'OBJECT', 'EMBED']);
+
+// Pure string operations: nothing here for a DOM-API sandbox to distort.
+function escapeHtml(content) {
+    return String(content)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function sanitizeHtml(content) {
+    try {
+        const doc = new DOMParser().parseFromString(String(content), 'text/html');
+
+        const walk = (node) => {
+            [...node.children].forEach((child) => {
+                if (DROPPED_TAGS.has(child.tagName)) {
+                    child.remove();
+                } else if (ALLOWED_TAGS.has(child.tagName)) {
+                    [...child.attributes].forEach((attr) => {
+                        if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
+                            child.removeAttribute(attr.name);
+                        }
+                    });
+                    walk(child);
+                } else {
+                    // keep the text, drop the markup
+                    child.replaceWith(doc.createTextNode(child.textContent || ''));
+                }
+            });
+        };
+
+        walk(doc.body);
+
+        return doc.body.innerHTML;
+    } catch (e) {
+        // Fail closed: if a sandboxed host distorts the DOM APIs above,
+        // escaped text renders wrong at worst — it cannot execute.
+        return escapeHtml(content);
+    }
+}
+
 export default class HotGrid extends LightningElement {
     _hot = null;
     _initialized = false;
@@ -107,6 +159,7 @@ export default class HotGrid extends LightningElement {
             contextMenu: true,
             copyPaste: true,
             fillHandle: true,
+            sanitizer: sanitizeHtml,
             licenseKey: 'non-commercial-and-evaluation',
             afterChange: (changes, source) => {
                 if (!changes || source === 'loadData') {
