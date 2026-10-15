@@ -1,26 +1,39 @@
-# Salesforce LWC Handsontable
+<div align="center">
+  <br><br>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/handsontable/handsontable/develop/resources/handsontable-logo-black.svg"/>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/handsontable/handsontable/develop/resources/handsontable-logo-white.svg"/>
+    <img width="360" alt="Logo of Handsontable DataGrid" src="https://raw.githubusercontent.com/handsontable/handsontable/develop/resources/handsontable-logo-black.svg"/>
+  </picture>
+  <br><br>
+  <h3>Handsontable DataGrid for Salesforce Lightning Web Components.</h3>
 
-Handsontable data grid running as a Lightning Web Component, connected to live Salesforce Account data with full CRUD support. **No workaround code** — the grid runs on its built-in Shadow DOM and Lightning Web Security support (Handsontable 18.1.1+).
+  <a href="https://handsontable.com">Website</a> &nbsp;&nbsp;—&nbsp;&nbsp; <a href="https://handsontable.com/docs">Documentation</a> &nbsp;&nbsp;—&nbsp;&nbsp; <a href="https://forum.handsontable.com/">Community</a>
+</div>
+
+# Salesforce LWC Handsontable DataGrid
+
+Handsontable DataGrid running as a Lightning Web Component, connected to live Salesforce Account data with full CRUD support. **No workaround code** — the grid runs on its built-in Shadow DOM and Lightning Web Security support (Handsontable DataGrid 18.1.1+).
 
 ## Features
 
-- Handsontable embedded in LWC (Lightning's default synthetic Shadow DOM, Lightning Web Security; the native opt-in also works - see Shadow DOM mode below)
+- Handsontable DataGrid embedded in LWC (Lightning's default synthetic Shadow DOM, Lightning Web Security; the native opt-in also works - see Shadow DOM mode below)
 - Live read/write from Salesforce Accounts via Lightning Data Service (no Apex)
 - Auto-detected field types — picklists become dropdowns, numbers become numeric, booleans become checkboxes
 - Column grouping with collapsible columns
 - Row create/delete synced to Salesforce
 - Built-in copy/paste, cell editors, selection, and context menu — no Locker/LWS workarounds
-- Allowlist HTML sanitizer wired through the grid's `sanitizer` option (Handsontable 18+ ships none built in)
+- Allowlist HTML sanitizer wired through the grid's `sanitizer` option (Handsontable DataGrid 18+ ships none built in)
 
 ## Project structure
 
 ```
 force-app/main/default/
 ├── lwc/
-│   ├── hotGrid/             # Handsontable wrapper (loads resources, creates the grid)
+│   ├── hotGrid/             # Handsontable DataGrid wrapper (loads resources, creates the grid)
 │   └── handsontableApp/     # App component (Salesforce data + column config)
 ├── staticresources/
-│   ├── handsontable/        # Handsontable JS/CSS (unpacked files, not a zip)
+│   ├── handsontable/        # Handsontable DataGrid JS/CSS (unpacked files, not a zip)
 │   └── handsontable.resource-meta.xml
 ├── flexipages/              # "Handsontable Grid" Lightning app page
 ├── tabs/                    # Tab for the page
@@ -32,7 +45,7 @@ force-app/main/default/
 - [Salesforce CLI (sf)](https://developer.salesforce.com/tools/salesforcecli)
 - A Salesforce org (Developer Edition, Sandbox, or Starter Trial)
 - Account records in the "All Accounts" list view (Developer Editions ship with samples)
-- Handsontable with Shadow DOM support (the bundled build is the official 18.1.1 release, which includes the Shadow DOM fixes from [handsontable#13194](https://github.com/handsontable/handsontable/pull/13194) and the Lightning Web Security clipboard fix from [handsontable#13388](https://github.com/handsontable/handsontable/issues/13388))
+- Handsontable DataGrid with Shadow DOM support (the bundled build is the official 18.1.1 release, which includes the Shadow DOM fixes from [handsontable#13194](https://github.com/handsontable/handsontable/pull/13194) and the Lightning Web Security clipboard fix from [handsontable#13388](https://github.com/handsontable/handsontable/issues/13388))
 
 ## Setup
 
@@ -64,7 +77,7 @@ sf org open --target-org my-org --path "/lightning/n/Handsontable_Grid"
 
 ### hotGrid
 
-Handsontable wrapper. Loads the static resources through `lightning/platformResourceLoader`, then creates the grid inside the component's Shadow DOM (`lwc:dom="manual"`). Exposes `@api` properties:
+Handsontable DataGrid wrapper. Loads the static resources through `lightning/platformResourceLoader`, then creates the grid inside the component's Shadow DOM (`lwc:dom="manual"`). Exposes `@api` properties:
 
 | Property | Description |
 |---|---|
@@ -88,13 +101,13 @@ Connects the grid to Salesforce Account data using Lightning Data Service only:
 
 ## Shadow DOM mode
 
-Lightning Experience renders LWC components with the synthetic Shadow DOM polyfill by default. This project sets no `shadowSupportMode`, so the grid runs in that default mode (verified in a Developer Edition org). Handsontable also works with the native opt-in (`static shadowSupportMode = 'native'`), with one change: Salesforce's `loadStyle` injects CSS into `document.head`, which a native shadow root ignores. Inject the two stylesheets into the component's shadow tree instead - append `<link>` elements inside the `lwc:dom="manual"` container and wait for their `load` events before creating the grid.
+Lightning Experience renders LWC components with the synthetic Shadow DOM polyfill by default. This project sets no `shadowSupportMode`, so the grid runs in that default mode (verified in a Developer Edition org). Handsontable DataGrid also works with the native opt-in (`static shadowSupportMode = 'native'`), with one change: Salesforce's `loadStyle` injects CSS into `document.head`, which a native shadow root ignores. Inject the two stylesheets into the component's shadow tree instead - append `<link>` elements inside the `lwc:dom="manual"` container and wait for their `load` events before creating the grid.
 
 ## HTML sanitizer
 
-Handsontable 18+ ships without a built-in HTML sanitizer, and Lightning Web Security sanitizes writes to shared DOM — not to a component's own shadow root, which is where the grid writes. `hotGrid` passes a small allowlist sanitizer (`sanitizeHtml` in `hotGrid.js`) through the grid's [`sanitizer`](https://handsontable.com/docs/javascript-data-grid/api/options/#sanitizer) option, so header labels, menu item labels, and clipboard payloads never reach `innerHTML` raw. It keeps basic inline formatting (`b`, `strong`, `i`, `em`, `u`, `br`, `span`), strips every attribute except `class` (the grid's menus mark checked items with a `span.selected` that the theme CSS targets), and drops script-bearing elements outright. If the DOM APIs it parses with ever throw in a sandboxed host, it fails closed to a pure-string HTML escape. For a richer policy, load a library such as DOMPurify as another static resource and call it from the same option.
+Handsontable DataGrid 18+ ships without a built-in HTML sanitizer, and Lightning Web Security sanitizes writes to shared DOM — not to a component's own shadow root, which is where the grid writes. `hotGrid` passes a small allowlist sanitizer (`sanitizeHtml` in `hotGrid.js`) through the grid's [`sanitizer`](https://handsontable.com/docs/javascript-data-grid/api/options/#sanitizer) option, so header labels, menu item labels, and clipboard payloads never reach `innerHTML` raw. It keeps basic inline formatting (`b`, `strong`, `i`, `em`, `u`, `br`, `span`), strips every attribute except `class` (the grid's menus mark checked items with a `span.selected` that the theme CSS targets), and drops script-bearing elements outright. If the DOM APIs it parses with ever throw in a sandboxed host, it fails closed to a pure-string HTML escape. For a richer policy, load a library such as DOMPurify as another static resource and call it from the same option.
 
-## Updating the Handsontable build
+## Updating the Handsontable DataGrid build
 
 Replace the files in `force-app/main/default/staticresources/handsontable/` with a newer release (`dist/handsontable.full.min.js`, `styles/handsontable.min.css`, `styles/ht-theme-main.min.css`) and redeploy the `staticresources` directory. Load both stylesheets — without the base stylesheet the cell editor renders in wrong positions.
 
