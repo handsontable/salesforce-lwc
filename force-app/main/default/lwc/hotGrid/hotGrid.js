@@ -13,6 +13,9 @@ const ALLOWED_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'SPAN']);
 const ALLOWED_ATTRS = new Set(['class']);
 const DROPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'IFRAME', 'OBJECT', 'EMBED']);
 
+const LOCK_ICON_PATH = 'M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.5A1 1 0 0 1 13 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 '
+    + '1 0 0 1 1-1h.5Zm1.5 0h4V5a2 2 0 0 0-4 0v2Z';
+
 // Pure string operations: nothing here for a DOM-API sandbox to distort.
 function escapeHtml(content) {
     return String(content)
@@ -54,9 +57,15 @@ function sanitizeHtml(content) {
     }
 }
 
+function isBlank(value) {
+    return value === null || value === undefined || value === '';
+}
+
 export default class HotGrid extends LightningElement {
     _hot = null;
     _initialized = false;
+    _syncRemoval = false;
+    _clearUndoAfterChange = false;
     _data = [];
     _columns = [];
     _nestedHeaders = [];
@@ -110,9 +119,45 @@ export default class HotGrid extends LightningElement {
         }
     }
 
+    // Shows a value Salesforce set (such as a new record's name) in a cell the user hasn't filled.
     @api
-    getDataAtCell(row, col) {
-        return this._hot ? this._hot.getDataAtCell(row, col) : null;
+    setValueIfEmpty(physicalRow, col, value) {
+        const current = this._hot ? this._hot.getSourceDataAtCell(physicalRow, col) : undefined;
+
+        if (this._hot && (current === null || current === undefined || current === '')) {
+            this._hot.setSourceDataAtCell(physicalRow, col, value);
+        }
+    }
+
+    /**
+     * Removes rows after Salesforce has deleted their records. A row hidden by a filter can't be removed.
+     *
+     * @param {number[]} physicalRows
+     * @returns {number[]} The rows removed.
+     */
+    @api
+    removeRows(physicalRows) {
+        const removable = this._hot
+            ? physicalRows.filter((physicalRow) => this._hot.toVisualRow(physicalRow) !== null)
+            : [];
+
+        if (!removable.length) {
+            return [];
+        }
+
+        this._syncRemoval = true;
+
+        try {
+            this._hot.alter('remove_row', removable.map((physicalRow) => [this._hot.toVisualRow(physicalRow), 1]));
+        } finally {
+            this._syncRemoval = false;
+        }
+
+        // Undo entries hold visual row indexes, which the removal just shifted; replaying one would change
+        // a different record.
+        this._clearUndo();
+
+        return removable;
     }
 
     renderedCallback() {
@@ -154,9 +199,27 @@ export default class HotGrid extends LightningElement {
             colHeaders: true,
             rowHeaders: true,
             height: 'auto',
-            columnSorting: true,
+            multiColumnSorting: true,
+            filters: true,
+            dropdownMenu: ['filter_by_condition', 'filter_by_value', 'filter_action_bar'],
             manualColumnResize: true,
-            contextMenu: true,
+            contextMenu: {
+                items: {
+                    row_above: {},
+                    row_below: {},
+                    sp1: '---------',
+                    // The grid removes rows only after Salesforce deletes their records (see `removeRows`).
+                    remove_row: {
+                        callback: (key, selection) => this._requestRowRemoval(selection),
+                    },
+                    sp2: '---------',
+                    undo: {},
+                    redo: {},
+                    sp3: '---------',
+                    copy: {},
+                    cut: {},
+                },
+            },
             copyPaste: true,
             fillHandle: true,
             sanitizer: sanitizeHtml,
@@ -166,22 +229,55 @@ export default class HotGrid extends LightningElement {
                     return;
                 }
 
+                // Rows go out by physical index, which sorting and filtering don't change.
                 changes.forEach(([row, col, oldValue, newValue]) => {
-                    if (oldValue !== newValue) {
+                    if (oldValue !== newValue && !(isBlank(oldValue) && isBlank(newValue))) {
                         this.dispatchEvent(new CustomEvent('cellchange', {
-                            detail: { row, col, oldValue, newValue },
+                            detail: {
+                                physicalRow: this._hot.toPhysicalRow(row),
+                                col,
+                                newValue,
+                                valid: this._isValid(row, col, newValue),
+                            },
                         }));
                     }
                 });
+
+                // Undoing a paste that added rows would blank their cells while the records stay.
+                if (this._clearUndoAfterChange) {
+                    this._clearUndoAfterChange = false;
+                    this._clearUndo();
+                }
             },
-            afterCreateRow: (index, amount) => {
-                this.dispatchEvent(new CustomEvent('rowcreate', { detail: { index, amount } }));
+            afterGetColHeader: (col, th) => this._markReadOnlyHeader(col, th),
+            afterCreateRow: (index, amount, source) => {
+                if (source === 'auto') {
+                    this._clearUndoAfterChange = true;
+                }
+
+                this.dispatchEvent(new CustomEvent('rowcreate', {
+                    detail: { physicalIndex: this._hot.toPhysicalRow(index), amount },
+                }));
             },
-            beforeRemoveRow: (index, amount) => {
-                this.dispatchEvent(new CustomEvent('rowremoverequest', { detail: { index, amount } }));
+            // Undoing an insert would remove the row from the grid only, so it becomes a removal request.
+            beforeUndo: (action) => {
+                if (action.actionType !== 'insert_row') {
+                    return undefined;
+                }
+
+                const physicalRows = [];
+
+                for (let row = action.index; row < action.index + action.amount; row++) {
+                    physicalRows.push(this._hot.toPhysicalRow(row));
+                }
+
+                this._dispatchRemoveRequest(physicalRows);
+                this._clearUndo();
 
                 return false;
             },
+            // Every other removal goes through the context menu's request or `removeRows`.
+            beforeRemoveRow: () => (this._syncRemoval ? undefined : false),
         };
 
         if (this._nestedHeaders.length) {
@@ -191,5 +287,80 @@ export default class HotGrid extends LightningElement {
         }
 
         this._hot = new window.Handsontable(container, settings);
+    }
+
+    // Runs the column's validator itself: for a row a paste adds while a filter is on, the cell meta Handsontable
+    // reads belongs to another row.
+    _isValid(visualRow, col, value) {
+        const validator = this._columns[col]?.validator;
+        let valid = true;
+
+        if (typeof validator === 'function') {
+            validator(value, (result) => {
+                valid = result;
+            });
+        } else {
+            valid = this._hot.getCellMeta(visualRow, col).valid !== false;
+        }
+
+        return valid;
+    }
+
+    _clearUndo() {
+        this._hot?.getPlugin('undoRedo')?.clear();
+    }
+
+    _requestRowRemoval(selection) {
+        const physicalRows = new Set();
+
+        selection.forEach(({ start, end }) => {
+            for (let row = Math.max(Math.min(start.row, end.row), 0); row <= Math.max(start.row, end.row); row++) {
+                physicalRows.add(this._hot.toPhysicalRow(row));
+            }
+        });
+
+        this._dispatchRemoveRequest([...physicalRows]);
+    }
+
+    _dispatchRemoveRequest(physicalRows) {
+        this.dispatchEvent(new CustomEvent('rowremoverequest', { detail: { physicalRows } }));
+    }
+
+    // Adds a lock icon to the bottom header of a read-only column.
+    _markReadOnlyHeader(col, th) {
+        const label = th.querySelector('.colHeader');
+        const existing = th.querySelector('.hot-lock');
+        const tr = th.parentElement;
+        const isBottomHeader = tr !== null && tr === tr.parentElement?.lastElementChild;
+        const locked = col >= 0 && isBottomHeader && this._columns[col]?.readOnly === true;
+
+        if (!label) {
+            return;
+        }
+
+        if (!locked) {
+            existing?.remove();
+
+            return;
+        }
+
+        if (!existing) {
+            const svgNs = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNs, 'svg');
+            const title = document.createElementNS(svgNs, 'title');
+            const path = document.createElementNS(svgNs, 'path');
+
+            svg.setAttribute('viewBox', '0 0 16 16');
+            svg.setAttribute('width', '12');
+            svg.setAttribute('height', '12');
+            svg.setAttribute('class', 'hot-lock');
+            svg.setAttribute('role', 'img');
+            svg.setAttribute('aria-label', 'Read-only');
+            title.textContent = 'Read-only';
+            path.setAttribute('d', LOCK_ICON_PATH);
+            svg.appendChild(title);
+            svg.appendChild(path);
+            label.appendChild(svg);
+        }
     }
 }

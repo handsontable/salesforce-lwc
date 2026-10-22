@@ -1,6 +1,6 @@
 <template>
-    <template if:true={error}>
-        <div class="slds-text-color_error slds-p-around_small">{error}</div>
+    <template lwc:if={error}>
+        <div class="slds-text-color_error slds-p-around_small" role="alert">{error}</div>
     </template>
     <c-hot-grid
         data={data}

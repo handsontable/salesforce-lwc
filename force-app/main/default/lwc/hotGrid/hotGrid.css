@@ -1,0 +1,7 @@
+.hot-lock {
+    margin-left: 0.25rem;
+    vertical-align: -1px;
+    fill: #706e6b;
+    /* Clicks reach the header label, which sorts the column. */
+    pointer-events: none;
+}
