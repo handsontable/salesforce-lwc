@@ -21,6 +21,9 @@ Handsontable DataGrid running as a Lightning Web Component, connected to live Sa
 - Live read/write from Salesforce Accounts via Lightning Data Service (no Apex)
 - Auto-detected field types — picklists become dropdowns, numbers become numeric, booleans become checkboxes
 - Column grouping with collapsible columns
+- Filters and multi-column sorting
+- Read-only columns for fields the user can't edit, and for dependent picklists, marked with a lock icon
+- A Phone format check: an invalid value is marked red and not saved
 - Row create/delete synced to Salesforce
 - Built-in copy/paste, cell editors, selection, and context menu — no Locker/LWS workarounds
 - Allowlist HTML sanitizer wired through the grid's `sanitizer` option (Handsontable DataGrid 18+ ships none built in)
@@ -82,13 +85,21 @@ Handsontable DataGrid wrapper. Loads the static resources through `lightning/pla
 | Property | Description |
 |---|---|
 | `data` | 2D array of cell values |
-| `columns` | Column type definitions (text, numeric, dropdown, checkbox) |
+| `columns` | Handsontable column settings (type, source, validator, readOnly) |
 | `nested-headers` | Grouped column headers |
 | `collapsible-columns` | Collapsible column group config |
 
-Events: `cellchange`, `rowcreate`, `rowremoverequest`
+Events report rows by physical index, which sorting and filtering don't change:
 
-`rowremoverequest` fires from `beforeRemoveRow`, which returns `false` to cancel the grid's own removal. The app component owns `data`, so it removes the row optimistically and puts it back when the org refuses the delete.
+| Event | Detail |
+|---|---|
+| `cellchange` | `physicalRow`, `col`, `newValue`, `valid` (`false` when the column's validator rejected the value) |
+| `rowcreate` | `physicalIndex`, `amount` |
+| `rowremoverequest` | `physicalRows` |
+
+Methods: `removeRows(physicalRows)` removes rows and returns the ones it removed; `setValueIfEmpty(physicalRow, col, value)` shows a value Salesforce set, such as a new record's name.
+
+The grid never removes a row on its own. Remove row in the context menu, and undoing an inserted row, raise `rowremoverequest`; the app deletes the records and then calls `removeRows`, so a refused delete leaves its row in place. Each removal clears the undo history, because undo entries point at rows by position.
 
 ### handsontableApp
 
@@ -96,7 +107,7 @@ Connects the grid to Salesforce Account data using Lightning Data Service only:
 
 - `getObjectInfo` — field metadata (types and labels)
 - `getPicklistValuesByRecordType` — picklist values for dropdown sources; `getObjectInfo` reports that a field is a picklist but does not list its values
-- `getListUi` — record data from the "All Accounts" list view
+- `getListInfoByName` / `getListRecordsByName` — the "All Accounts" list view's columns and its first 50 records. The columns go in `optionalFields`: without them LDS returns records with no values
 - `updateRecord` / `createRecord` / `deleteRecord` — CRUD synced on grid events
 
 ## Shadow DOM mode
