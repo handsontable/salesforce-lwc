@@ -289,18 +289,17 @@ export default class HotGrid extends LightningElement {
         this._hot = new window.Handsontable(container, settings);
     }
 
-    // Runs the column's validator itself: for a row a paste adds while a filter is on, the cell meta Handsontable
-    // reads belongs to another row.
+    // Runs the column's validator here instead of reading the result from cell meta: for a row a paste adds while
+    // a filter is on, that meta belongs to another row. Its column settings (validator, source) are the same.
     _isValid(visualRow, col, value) {
-        const validator = this._columns[col]?.validator;
+        const meta = this._hot.getCellMeta(visualRow, col);
+        const validator = this._hot.getCellValidator(meta);
         let valid = true;
 
         if (typeof validator === 'function') {
-            validator(value, (result) => {
+            validator.call(meta, value, (result) => {
                 valid = result;
             });
-        } else {
-            valid = this._hot.getCellMeta(visualRow, col).valid !== false;
         }
 
         return valid;

@@ -278,13 +278,14 @@ export default class HandsontableApp extends LightningElement {
     handleRowRemoveRequest(event) {
         const rows = event.detail.physicalRows
             .map((physicalRow) => this._rows[physicalRow])
-            .filter((row) => row && !row.deleting);
+            .filter((row) => row && !row.deleting && !row.deleted);
 
         rows.forEach((row) => {
             row.deleting = true;
         });
 
-        // A row whose create failed has no record, so it goes without a delete call.
+        // A row whose create failed has no record, so it goes without a delete call. A row already deleted (kept
+        // because a filter hid it) isn't deleted again; it's only removed from the grid below.
         Promise.allSettled(rows.map((row) => row.saved.then(() => deleteRecord(row.id), () => undefined)))
             .then((results) => {
                 const failed = results.find((result) => result.status === 'rejected');
